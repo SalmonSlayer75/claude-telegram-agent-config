@@ -713,7 +713,7 @@ After Pass 2 APPROVED verdict, note in review-pass2.md:
 ## Post-Merge Health Check (Required)
 
 Orchestrator must trigger health check 5 minutes after PR #[N] is merged:
-- Production HTTP status check (annaspath.com)
+- Production HTTP status check (yourapp.com)
 - Issue closure verification (GitHub auto-closed via Fixes: #N)
 - Error rate check if Sentry is configured
 - Emergency revert command if needed: `gh pr revert [PR_NUMBER]`

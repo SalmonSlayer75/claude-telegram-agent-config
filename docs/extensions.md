@@ -37,8 +37,8 @@ Each bot gets a structured state file that serves as persistent working memory a
 ## Recent Decisions (last 7 days)
 <!-- Format: - [decision] (YYYY-MM-DD) -->
 
-## Waiting On Jeremy
-<!-- Things COS needs Jeremy's input on before proceeding -->
+## Waiting On Human
+<!-- Things the bot needs human input on before proceeding -->
 
 ## Context Carry-Forward
 <!-- Important context from recent conversations that would be lost on restart -->
@@ -205,7 +205,7 @@ exec claude --channels plugin:telegram@claude-plugins-official \
 
 This lets VPE review code across both projects from a single bot. The working directory (`~/Projects`) contains the VPE's CLAUDE.md and state file, while `--add-dir` grants read/write access to the actual codebases.
 
-COS also uses `--add-dir` for cross-referencing project status when briefing Jeremy:
+COS also uses `--add-dir` for cross-referencing project status when briefing the human:
 
 ```bash
 cd ~/ChiefOfStaff
@@ -257,7 +257,7 @@ This prevents the bots from producing conflicting or duplicate information.
 
 The management script (`claude-bot status`) checks if the tmux session exists. But after a bot "bakes" (hits context limit), the tmux session is still alive — claude is sitting at an empty prompt, not listening for messages. `status` says RUNNING, but the bot is deaf.
 
-This is exactly the failure mode we hit: COS showed as RUNNING, but Jeremy's messages went unanswered for hours.
+This is exactly the failure mode we hit: COS showed as RUNNING, but the human's messages went unanswered for hours.
 
 ### What we do: Watchdog cron job with pane inspection
 
