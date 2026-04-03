@@ -1,27 +1,55 @@
 #!/usr/bin/env bash
+# claude-bot — Manage Claude Code Telegram bot fleet
+# Usage: claude-bot {start|stop|restart|status|logs} {bot-name|all}
 #
-# claude-bot - manage Claude Code Telegram bot daemons
-#
-# Usage:
-#   claude-bot start   work|personal|all
-#   claude-bot stop    work|personal|all
-#   claude-bot status  [work|personal|all]
-#   claude-bot logs    work|personal
-#   claude-bot restart work|personal|all
-#
-# CUSTOMIZE: Update the BOT_* arrays below with your bot names.
+# CONFIGURE: Edit the bot definitions below to match your fleet.
+# Each bot needs a tmux session name, socket name, and start script path.
 
 set -euo pipefail
 
+# ============================================================
+# BOT DEFINITIONS — customize for your fleet
+# ============================================================
 declare -A BOT_TMUX BOT_SOCKET BOT_SCRIPT
 
-BOT_TMUX[work]="claude-work-bot"
-BOT_SOCKET[work]="claude-work"
-BOT_SCRIPT[work]="$HOME/bin/claude-work-bot-start.sh"
+# Bot 1: Chief of Staff (email, calendar, admin)
+BOT_TMUX[cos]="claude-cos-bot"
+BOT_SOCKET[cos]="claude-cos"
+BOT_SCRIPT[cos]="$HOME/bin/claude-cos-bot-start.sh"
 
-BOT_TMUX[personal]="claude-personal-bot"
-BOT_SOCKET[personal]="claude-personal"
-BOT_SCRIPT[personal]="$HOME/bin/claude-personal-bot-start.sh"
+# Bot 2: VP Engineering — Project A
+BOT_TMUX[vpe-a]="claude-vpe-a-bot"
+BOT_SOCKET[vpe-a]="claude-vpe-a"
+BOT_SCRIPT[vpe-a]="$HOME/bin/claude-vpe-a-bot-start.sh"
+
+# Bot 3: VP Engineering — Project B
+BOT_TMUX[vpe-b]="claude-vpe-b-bot"
+BOT_SOCKET[vpe-b]="claude-vpe-b"
+BOT_SCRIPT[vpe-b]="$HOME/bin/claude-vpe-b-bot-start.sh"
+
+# Bot 4: CTO (cross-project architecture)
+BOT_TMUX[cto]="claude-cto-bot"
+BOT_SOCKET[cto]="claude-cto"
+BOT_SCRIPT[cto]="$HOME/bin/claude-cto-bot-start.sh"
+
+# Bot 5: DevOps (fleet management)
+BOT_TMUX[devops]="claude-devops-bot"
+BOT_SOCKET[devops]="claude-devops"
+BOT_SCRIPT[devops]="$HOME/bin/claude-devops-bot-start.sh"
+
+# Bot 6: Product Marketing (research, content)
+BOT_TMUX[marketing]="claude-marketing-bot"
+BOT_SOCKET[marketing]="claude-marketing"
+BOT_SCRIPT[marketing]="$HOME/bin/claude-marketing-bot-start.sh"
+
+# Add more bots by copying the pattern above
+
+# Space-separated list of all bot names (must match keys above)
+ALL_BOTS="cos vpe-a vpe-b cto devops marketing"
+
+# ============================================================
+# COMMANDS — generally no changes needed below
+# ============================================================
 
 start_bot() {
     local name="$1"
@@ -83,11 +111,17 @@ logs_bot() {
 
 resolve_targets() {
     local target="${1:-all}"
-    case "$target" in
-        all) echo "work personal" ;;
-        work|personal) echo "$target" ;;
-        *) echo "Unknown bot: $target" >&2; exit 1 ;;
-    esac
+    if [ "$target" = "all" ]; then
+        echo "$ALL_BOTS"
+        return
+    fi
+    # Validate bot name exists
+    if [ -z "${BOT_TMUX[$target]+x}" ]; then
+        echo "Unknown bot: $target" >&2
+        echo "Available bots: $ALL_BOTS" >&2
+        exit 1
+    fi
+    echo "$target"
 }
 
 ACTION="${1:-status}"
@@ -99,7 +133,7 @@ case "$ACTION" in
     restart) for bot in $(resolve_targets "$TARGET"); do stop_bot "$bot"; sleep 1; start_bot "$bot"; done ;;
     status)  for bot in $(resolve_targets "$TARGET"); do status_bot "$bot"; done ;;
     logs)
-        [[ "$TARGET" == "all" ]] && { echo "Specify which bot: work or personal"; exit 1; }
+        [[ "$TARGET" == "all" ]] && { echo "Specify which bot: $ALL_BOTS"; exit 1; }
         logs_bot "$TARGET" ;;
-    *) echo "Usage: claude-bot {start|stop|restart|status|logs} {work|personal|all}"; exit 1 ;;
+    *) echo "Usage: claude-bot {start|stop|restart|status|logs} {bot-name|all}"; exit 1 ;;
 esac

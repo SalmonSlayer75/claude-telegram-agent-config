@@ -21,6 +21,24 @@
             "command": "if [ ! -f /tmp/mybot-state-loaded ]; then ~/bin/memory-daily-init work 2>/dev/null; ~/bin/memory-search work --index 2>/dev/null; echo '[STARTUP] Read these files FIRST to restore your working memory: (1) ~/AgentWorkspace/bot-state.md (2) ~/AgentWorkspace/user-profile.md (3) ~/AgentWorkspace/daily/'$(date +%Y-%m-%d)'.md. You can search past context with: memory-search work \"query\"'; touch /tmp/mybot-state-loaded; fi"
           }
         ]
+      },
+      {
+        "matcher": "mcp__plugin_telegram_telegram__reply",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/bin/inbox-check mybot 2>/dev/null || true"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__plugin_telegram_telegram__reply",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '[MANDATORY STATE SAVE] BEFORE sending this reply: Do you have ANY unsaved analysis, findings, decisions, action items, or context from this conversation that are NOT yet in ~/AgentWorkspace/bot-state.md? If YES: STOP. Write them to your state file FIRST using Edit, THEN send this reply. Your conversation can end at any moment — if it is not in your state file, it is LOST. This is not optional.'"
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -29,7 +47,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo '[STATE REMINDER] You just sent a Telegram reply. (1) Update ~/AgentWorkspace/bot-state.md if decisions/action items/commitments were made. (2) If you learned anything new about the user (preference, relationship, habit, personal detail), update ~/AgentWorkspace/user-profile.md.'"
+            "command": "echo '[MANDATORY] You just sent a Telegram reply. Update ~/AgentWorkspace/bot-state.md NOW with any decisions, action items, or context from this exchange. Do NOT skip this — your conversation can reset at any moment and anything not in the state file will be permanently lost. Also update ~/AgentWorkspace/user-profile.md if you learned anything new about the user.'"
           }
         ]
       }
@@ -51,7 +69,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/bin/memory-search work --index 2>/dev/null; echo '[POST-COMPACTION] Context was just compacted. Re-read: (1) ~/AgentWorkspace/bot-state.md (2) ~/AgentWorkspace/user-profile.md (3) ~/AgentWorkspace/daily/'$(date +%Y-%m-%d)'.md. Search past context with: memory-search work \"query\"'"
+            "command": "~/bin/memory-search work --index 2>/dev/null; echo '[POST-COMPACTION] Context was just compacted. Re-read: (1) ~/AgentWorkspace/bot-state.md (2) ~/AgentWorkspace/user-profile.md (3) ~/AgentWorkspace/daily/'$(date +%Y-%m-%d)'.md to restore your working memory. Search past context with: memory-search work \"query\"'"
           }
         ]
       }

@@ -1,12 +1,12 @@
-# Claude Code Telegram Agent — Production Config
+# Mindspan Labs Agents
 
-Battle-tested configuration for running Claude Code as a 24/7 Telegram agent with persistent memory, automatic recovery, scheduled tasks, and 38 reusable agent skills.
+Battle-tested configuration for running a fleet of Claude Code bots as 24/7 Telegram agents with persistent memory, automatic recovery, scheduled tasks, inter-agent coordination, and 45+ reusable agent skills.
 
 ## What This Is
 
-We run two Claude Code bots on a single machine via Telegram — a **Chief of Staff** (email, calendar, research, admin) and a **VP of Engineering** (code review, PRs, architecture, CI). After several weeks in production, we hit real problems and built solutions for each one. This repo contains those solutions as reusable templates.
+We run six Claude Code bots on a single machine via Telegram — a **Chief of Staff** (email, calendar, admin), a **CTO** (cross-project architecture, standards), two **VP Engineering** bots (one per project), a **DevOps** lead (fleet management), and a **Product Marketing** agent (research, content). After months in production, we hit real problems and built solutions for each one. This repo contains those solutions as reusable templates.
 
-**What you get**: You message a Telegram bot from your phone, and Claude Code responds — with full access to your codebase, files, terminal, databases, and any MCP tools you've configured. It remembers what you were working on across session restarts, proactively does things on a schedule, and auto-recovers when it hits context limits.
+**What you get**: You message a Telegram bot from your phone, and Claude Code responds — with full access to your codebase, files, terminal, databases, and any MCP tools you've configured. It remembers what you were working on across session restarts, coordinates with other bots via an inbox system, proactively does things on a schedule, and auto-recovers when it hits context limits.
 
 ---
 
@@ -14,7 +14,7 @@ We run two Claude Code bots on a single machine via Telegram — a **Chief of St
 
 | # | Problem | Solution | Docs |
 |---|---------|----------|------|
-| 1 | **Bot forgets everything after restart** — context window fills up, session "bakes", all conversation history is lost | Structured state file + Claude Code hooks that nudge the bot to save/load state | [State File & Hooks](docs/state-file-and-hooks.md) |
+| 1 | **Bot forgets everything after restart** — context window fills up, session "bakes", all conversation history is lost | Structured state file + mandatory save-before-reply hooks | [State File & Hooks](docs/state-file-and-hooks.md) |
 | 2 | **No scheduled/proactive behavior** — bot only responds when messaged | Cron scripts running `claude -p` one-shots, independent of the channel bot | [Cron Jobs](docs/cron-jobs.md) |
 | 3 | **Bot can't access files outside working directory** | `--add-dir` flags in start scripts | [Start Scripts](examples/start-scripts/) |
 | 4 | **Multiple bots producing conflicting information** | Explicit role boundaries and redirect rules in CLAUDE.md | [Role Isolation](docs/role-isolation.md) |
@@ -24,6 +24,8 @@ We run two Claude Code bots on a single machine via Telegram — a **Chief of St
 | 8 | **Bot doesn't learn about you over time** — re-explain preferences every session | Structured user profile + PostToolUse learning loop | [Personalization](docs/personalization.md) |
 | 9 | **Context compaction loses important state** | PreCompact emergency save + PostCompact reload | [Compaction Hooks](docs/extensions.md#problem-9-context-compaction-loses-important-state) |
 | 10 | **Credentials scattered across scripts** | Centralized env file sourced by all scripts | [Credentials](examples/credentials/) |
+| 11 | **Bots can't coordinate with each other** — tasks that span roles fall through the cracks | File-based inbox system with priority routing and hook-driven checks | [Inter-Agent Communication](docs/inter-agent-communication.md) |
+| 12 | **Hook changes are error-prone across many bots** — manual edits to 6 settings files is fragile | Fleet hook automation script that generates validated configs for all bots | [Fleet Hooks](examples/fleet-hooks/) |
 
 ---
 
@@ -44,7 +46,7 @@ We run two Claude Code bots on a single machine via Telegram — a **Chief of St
 - Copy a [state file template](examples/state-files/) into your project directory
 - Copy the [user profile template](examples/personalization/user-profile-template.md) and fill in your basics
 - Add the [CLAUDE.md instructions](docs/state-file-and-hooks.md#layer-2-aggressive-claudemd-instructions) to your bot's CLAUDE.md
-- Add the [hooks config](examples/hooks/settings.local.json) to your project's `.claude/settings.local.json` (includes all 4 hooks: PreToolUse, PostToolUse, PreCompact, PostCompact)
+- Add the [hooks config](examples/hooks/settings.local.json) to your project's `.claude/settings.local.json` (includes mandatory state-save gates + all 4 lifecycle hooks)
 - Set up [credentials](examples/credentials/bot-credentials.env.example) in `~/.claude/bot-credentials.env`
 - Your bot will now remember action items, decisions, context, and learn your preferences over time
 
@@ -64,6 +66,16 @@ We run two Claude Code bots on a single machine via Telegram — a **Chief of St
 - Copy any `.md` file into your project's `.claude/commands/` directory
 - The bot can now run specialized audits, reviews, and analysis on demand
 
+**Priority 6 — Inter-Agent Communication** (15 min, multi-bot only):
+- Follow the [Inter-Agent Communication](docs/inter-agent-communication.md) guide
+- Copy the [inbox-check script](examples/inter-agent/inbox-check) to `~/bin/`
+- Each bot gets an `inbox.md` file and hooks that auto-check it before every reply
+
+**Priority 7 — Fleet Hook Automation** (10 min, 3+ bots):
+- Copy [examples/fleet-hooks/update-fleet-hooks.js](examples/fleet-hooks/update-fleet-hooks.js)
+- Configure your bot definitions
+- Run once to generate all hooks configs, re-run whenever you change the fleet
+
 ---
 
 ## Prerequisites
@@ -80,94 +92,68 @@ We run two Claude Code bots on a single machine via Telegram — a **Chief of St
 
 ```
 docs/
-  base-setup-guide.md         # Step-by-step: from zero to working Telegram bot
-  extensions.md                # Full writeup of all production additions
-  personalization.md           # User profile learning loop pattern
-  state-file-and-hooks.md      # Deep dive: persistent memory across restarts
-  cron-jobs.md                 # Deep dive: scheduled one-shot tasks
-  role-isolation.md            # Deep dive: multi-bot coordination
-  wsl-autostart.md             # WSL-specific auto-start on Windows boot
+  base-setup-guide.md              # Step-by-step: from zero to working Telegram bot
+  extensions.md                    # Full writeup of all production additions
+  personalization.md               # User profile learning loop pattern
+  state-file-and-hooks.md          # Deep dive: persistent memory across restarts
+  cron-jobs.md                     # Deep dive: scheduled one-shot tasks
+  role-isolation.md                # Deep dive: multi-bot coordination
+  wsl-autostart.md                 # WSL-specific auto-start on Windows boot
+  inter-agent-communication.md     # Inter-agent inbox system + coordination patterns
 
 examples/
-  start-scripts/               # Bot start scripts with --add-dir and zombie cleanup
+  start-scripts/                   # Bot start scripts with --add-dir and zombie cleanup
     work-bot-start.sh
 
-  watchdog/                    # Auto-restart bots that hit context limits
-    claude-bot-watchdog.sh     # With local-model backoff logic
+  watchdog/                        # Auto-restart bots that hit context limits
+    claude-bot-watchdog.sh         # With local-model backoff logic
 
-  cron-scripts/                # Templates for scheduled tasks
-    scheduled-task-template.sh # With flock, stderr capture, --max-turns
+  cron-scripts/                    # Templates for scheduled tasks
+    scheduled-task-template.sh     # With flock, stderr capture, --max-turns
 
-  hooks/                       # Claude Code hooks — full 4-hook lifecycle
-    settings.local.json        # PreToolUse, PostToolUse, PreCompact, PostCompact
+  hooks/                           # Claude Code hooks — full 4-hook lifecycle
+    settings.local.json            # With mandatory state-save gates
 
-  state-files/                 # Structured state file templates
-    bot-state.md               # General-purpose bot
-    engineering-bot-state.md   # Engineering-focused bot
+  fleet-hooks/                     # Fleet-wide hook management
+    update-fleet-hooks.js          # Generate hook configs for all bots at once
 
-  memory-search/               # SQLite FTS5 search across all bot memory
-    memory-search              # Search/index tool (Python)
-    memory-log-conversation    # Log exchanges to conversation log + daily note
-    memory-daily-init          # Initialize today's daily note
+  inter-agent/                     # Inter-agent coordination
+    inbox-check                    # Check bot inbox for new messages
+    inbox-template.md              # Template for bot inbox files
 
-  personalization/             # User profile learning loop
-    user-profile-template.md   # Template for structured user profile
+  state-files/                     # Structured state file templates
+    bot-state.md                   # General-purpose bot
+    engineering-bot-state.md       # Engineering-focused bot
 
-  credentials/                 # Centralized secret management
+  memory-search/                   # SQLite FTS5 search across all bot memory
+    memory-search                  # Search/index tool (Python)
+    memory-log-conversation        # Log exchanges to conversation log + daily note
+    memory-daily-init              # Initialize today's daily note
+
+  personalization/                 # User profile learning loop
+    user-profile-template.md       # Template for structured user profile
+
+  credentials/                     # Centralized secret management
     bot-credentials.env.example
 
-  wsl-autostart/               # Auto-start bots on Windows boot
-    wsl-boot.sh                # Linux-side boot script
-    wsl-claude-bots.bat        # Windows Startup folder batch file
+  wsl-autostart/                   # Auto-start bots on Windows boot
+    wsl-boot.sh                    # Linux-side boot script
+    wsl-claude-bots.bat            # Windows Startup folder batch file
 
-  logrotate/                   # Log rotation config
+  logrotate/                       # Log rotation config
     logrotate.conf
 
-  management/                  # Bot lifecycle management
-    claude-bot                 # start/stop/restart/status/logs for all bots
+  management/                      # Bot lifecycle management
+    claude-bot                     # start/stop/restart/status/logs for all bots
 
-  agent-skills/                # 38 reusable Claude Code slash commands
-    README.md                  # Full catalog with descriptions
-    vpe-workflow/              # Plan -> Review -> Ship workflow (4 skills)
-      review-plan.md
-      review-pr.md
-      review-bugfix.md
-      engineering-status.md
-    auditors/                  # Specialized code review lenses (8 skills)
-      security-reviewer.md
-      api-auditor.md
-      frontend-auditor.md
-      prompt-auditor.md
-      data-modeler.md
-      performance-auditor.md
-      a11y-auditor.md
-      cost-guardian.md
-    development/               # Building, fixing, and analyzing code (12 skills)
-      architect.md
-      bug-analyzer.md
-      code-architect.md
-      code-simplifier.md
-      deep-fix.md
-      deep-reviewer.md
-      fix-issue.md
-      full-audit.md
-      new-component.md
-      new-endpoint.md
-      sprint-planner.md
-      test-writer.md
-    quality/                   # Testing, review, and diagnostics (6 skills)
-      peer-review.md
-      playbook-auditor.md
-      root-cause-triage.md
-      run-e2e.md
-      test-session.md
-      issue-intelligence.md
-    ux-design/                 # UX, design systems, and content (5 skills)
-      designer.md
-      heuristic-eval.md
-      ux-ia-auditor.md
-      ux-writer.md
-      error-ux-auditor.md
+  agent-skills/                    # 45 reusable Claude Code slash commands
+    README.md                      # Full catalog with descriptions
+    vpe-workflow/                  # Plan -> Review -> Ship workflow (4 skills)
+    auditors/                      # Specialized code review lenses (8 skills)
+    development/                   # Building, fixing, and analyzing code (15 skills)
+    quality/                       # Testing, review, and diagnostics (6 skills)
+    ux-design/                     # UX, design systems, and content (5 skills)
+    agent-coordination/            # Multi-agent workflows (3 skills)
 ```
 
 ---
@@ -180,26 +166,24 @@ examples/
 │                   (Telegram)                         │
 └──────────────────────┬──────────────────────────────┘
                        │
-         ┌─────────────┴─────────────┐
-         │                           │
-    @work_bot                   @personal_bot
-         │                           │
-┌────────┴────────┐         ┌────────┴────────┐
-│  tmux session   │         │  tmux session   │
-│  (isolated)     │         │  (isolated)     │
-│                 │         │                 │
-│  Claude Code    │         │  Claude Code    │
-│  --channels     │         │  --channels     │
-│  --add-dir ...  │         │  --add-dir ...  │
-│                 │         │                 │
-│  CLAUDE.md      │         │  CLAUDE.md      │
-│  bot-state.md   │         │  bot-state.md   │
-│  .claude/       │         │  .claude/       │
-│    hooks        │         │    hooks        │
-│    skills       │         │    skills       │
-└────────┬────────┘         └────────┬────────┘
-         │                           │
-         └─────────────┬─────────────┘
+     ┌─────────┬───────┼───────┬─────────┬──────────┐
+     │         │       │       │         │          │
+  @cos_bot  @cto_bot  @vpe1  @vpe2  @devops   @mktg_bot
+     │         │       │       │         │          │
+┌────┴────┐ ┌──┴──┐ ┌──┴──┐ ┌──┴──┐ ┌────┴────┐ ┌──┴──┐
+│  tmux   │ │tmux │ │tmux │ │tmux │ │  tmux   │ │tmux │
+│ session │ │sess.│ │sess.│ │sess.│ │ session │ │sess.│
+│         │ │     │ │     │ │     │ │         │ │     │
+│ Claude  │ │Clau-│ │Clau-│ │Clau-│ │ Claude  │ │Clau-│
+│ Code    │ │de   │ │de   │ │de   │ │ Code    │ │de   │
+│--channel│ │Code │ │Code │ │Code │ │--channel│ │Code │
+│         │ │     │ │     │ │     │ │         │ │     │
+│CLAUDE.md│ │     │ │     │ │     │ │CLAUDE.md│ │     │
+│state.md │ │     │ │     │ │     │ │state.md │ │     │
+│inbox.md │ │     │ │     │ │     │ │inbox.md │ │     │
+└────┬────┘ └──┬──┘ └──┬──┘ └──┬──┘ └────┬────┘ └──┬──┘
+     │         │       │       │         │          │
+     └─────────┴───────┼───────┴─────────┴──────────┘
                        │
               ┌────────┴────────┐
               │   Watchdog      │
@@ -220,10 +204,13 @@ examples/
 ## Key Concepts
 
 ### State File = Working Memory
-The bot writes a structured markdown file after every interaction. On restart, it reads this file first. This is how it "remembers" across sessions. Hooks enforce the discipline — the bot gets a system-level nudge after every Telegram reply.
+The bot writes a structured markdown file after every interaction. On restart, it reads this file first. This is how it "remembers" across sessions. Hooks enforce the discipline — the bot is **blocked from replying** until it saves unsaved state.
+
+### Mandatory State-Save Gates (Production-Hardened)
+The original "reminder" hooks were too gentle — bots would ignore them under pressure. The production fix: a **PreToolUse gate** on the Telegram reply tool that forces the bot to save state BEFORE it can send a reply. This is the single most important reliability improvement we made.
 
 ### 4-Hook Lifecycle = Nothing Falls Through the Cracks
-Four hooks cover the full session lifecycle: **PreToolUse** loads state on first reply, **PostToolUse** nudges the bot to save after every reply, **PreCompact** is a last-chance emergency save before context compaction, **PostCompact** reindexes and reloads after compaction.
+Four hooks cover the full session lifecycle: **PreToolUse** loads state on first reply + gates every reply behind a state save, **PostToolUse** enforces a mandatory post-reply save, **PreCompact** is a last-chance emergency save before context compaction, **PostCompact** reindexes and reloads after compaction.
 
 ### User Profile = Long-Term Learning
 A structured markdown file where the bot records what it learns about you — preferences, relationships, scheduling habits, communication style. Updated incrementally via PostToolUse hooks. Compounds over weeks into genuine personalization.
@@ -240,23 +227,36 @@ Scheduled tasks use `claude -p` (one-shot prompt mode), completely independent o
 ### Role Isolation = No Conflicts
 Each bot's CLAUDE.md defines what it owns, what it must not do, and how to redirect questions to the other bot. Bots coordinate through files and databases, not shared memory.
 
+### Inter-Agent Inbox = Asynchronous Coordination
+Each bot has an `inbox.md` file. Bots write messages to each other's inboxes with priority levels and status tracking. A PreToolUse hook checks the inbox before every reply, so bots pick up messages automatically without polling.
+
+### Fleet Hook Automation = Consistent Configuration
+A Node.js script generates `.claude/settings.local.json` for all bots from a single config. When you need to change a hook pattern fleet-wide, edit one file and regenerate.
+
 ---
 
 ## Our Production Setup
 
 For reference, here's what we actually run:
 
-| Bot | Role | Cron Jobs | Skills |
-|-----|------|-----------|--------|
-| **COS** (Chief of Staff) | Email, calendar, Notion, research, admin | Morning brief (7am), email check (every 15min), weekly research (Mon 6am), weekly use cases (Tue 6am), EOD summary (6pm), weekly review (Fri 4pm) | Google Workspace, Notion, LinkedIn API, WebSearch |
-| **VPE** (VP Engineering) | Code review, PRs, architecture, CI, security | Daily status (8am), PR watcher (every 30min), weekly report (Fri 3pm) | 38 agent skills (auditors, reviewers, planners, UX, quality) |
+| Bot | Role | Cron Jobs | Integrations |
+|-----|------|-----------|--------------|
+| **COS** (Chief of Staff) | Email, calendar, admin, research | Timezone-aware briefings (every 30min, full at 6am/9am/noon/3pm/6pm local), weekly review (Fri 4pm) | Google Workspace, Notion, LinkedIn API, WebSearch |
+| **CTO** | Cross-project architecture, standards, strategy | On-demand | Playwright, GitHub |
+| **VPE-1** (VP Engineering) | Code review, PRs, architecture for Project A | On-demand | 45 agent skills, Playwright, GitHub |
+| **VPE-2** (VP Engineering) | Code review, PRs, architecture for Project B | On-demand | 45 agent skills, Playwright, GitHub |
+| **DevOps** | Fleet management, bot creation/maintenance | On-demand | All bot configs, systemd, cron |
+| **Marketing** (Product Marketing) | Market research, content, thought leadership | Weekly research (Mon 6am), weekly use cases (Tue 6am) | Google Workspace, WebSearch |
 
-Both bots:
-- Run in isolated tmux sessions with separate sockets
-- Have structured state files with hook-based persistence
-- Are monitored by the watchdog (5-min cron)
+All bots share:
+- Isolated tmux sessions with separate sockets
+- Structured state files with mandatory save-before-reply hooks
+- Watchdog monitoring (5-min cron)
 - Auto-start via systemd on boot
-- Have explicit role boundaries preventing overlap
+- Explicit role boundaries preventing overlap
+- Inter-agent inbox for async coordination
+- Memory search for long-term recall
+- User profile for personalization
 
 ---
 

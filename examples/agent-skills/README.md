@@ -1,6 +1,6 @@
 # Agent Skills (Claude Code Slash Commands)
 
-These are reusable Claude Code slash commands (placed in `.claude/commands/`) that give your Telegram bot specialized capabilities. They were developed by the community for production use across multiple projects and are designed to be portable — 38 skills across 5 categories.
+These are reusable Claude Code slash commands (placed in `.claude/commands/`) that give your Telegram bot specialized capabilities. They were developed for production use across multiple projects and are designed to be portable — 39 skills across 6 categories.
 
 ## How to Use
 
@@ -36,7 +36,7 @@ Specialized code review lenses — each focuses on one domain.
 | `/a11y-auditor` | WCAG 2.1 AA, keyboard navigation, ARIA, contrast ratios, touch targets |
 | `/cost-guardian` | LLM cost tracking, spending analysis, model routing optimization |
 
-### Development (`development/`) — 12 skills
+### Development (`development/`) — 14 skills
 
 Higher-level engineering skills for building, fixing, and analyzing code.
 
@@ -54,6 +54,9 @@ Higher-level engineering skills for building, fixing, and analyzing code.
 | `/fix-issue` | Issue triage and implementation — from GitHub issue to working PR |
 | `/new-component` | Scaffolds a React component with types, tests, and accessibility |
 | `/new-endpoint` | Scaffolds an API route with auth, validation, error handling, and tests |
+| `/data-crawler` | Web scraping and data pipeline builder |
+| `/prompt-optimizer` | Optimizes LLM prompts for cost, quality, and latency |
+| `/metrics-planner` | Defines metrics, KPIs, and instrumentation plans |
 
 ### Quality (`quality/`) — 6 skills
 
@@ -80,19 +83,21 @@ User experience, design systems, and content strategy.
 | `/ux-writer` | UX writing review — microcopy, error messages, onboarding text, CTAs, tone consistency |
 | `/error-ux-auditor` | Error state UX audit — are errors helpful, recoverable, and human-readable? |
 
-### Additional specialized skills (from the community, not included here)
+### Agent Coordination (`agent-coordination/`) — 2 skills
 
-Some skills are too project-specific to be portable but worth knowing about:
+Multi-agent orchestration patterns for running parallel agent workflows.
+
+| Skill | What it does |
+|-------|-------------|
+| `/swarm-watchdog` | Monitors swarm agents for hangs, stalls, and missed state transitions. Pull-based polling with configurable thresholds. |
+
+Additional coordination skills available in production but too project-specific for this repo:
 
 | Skill | What it does | Why not included |
 |-------|-------------|-----------------|
-| `/sprint-pm` | Full sprint PM orchestration with multi-agent coordination | Requires specific agent infrastructure |
-| `/swarm-fix` | Parallel multi-agent bug fixing across worktrees | Requires swarm orchestration setup |
-| `/swarm-watchdog` | Monitors swarm agents for hangs, failures, conflicts | Requires swarm infrastructure |
-| `/new-onboarding-phase` | Scaffolds a new onboarding phase with all screens | Project-specific domain model |
-| `/data-crawler` | Web scraping and data pipeline builder | General but requires project-specific targets |
-| `/metrics-planner` | Defines metrics, KPIs, and instrumentation plans | General but heavily customized |
-| `/prompt-optimizer` | Optimizes LLM prompts for cost, quality, and latency | General but tied to specific LLM patterns |
+| `/sprint-pm` | Full sprint PM orchestration — groups issues, spawns agents per group, manages gates | Contains project-specific database refs and role names |
+| `/swarm-fix` | Multi-agent bug resolution pipeline (5 agents, 2 approval gates, parallel worktrees) | Contains project-specific tokens and infrastructure refs |
+| `/code-executor` | Implementation agent — follows approved spec exactly, no improvisation | Contains project-specific database and staging config |
 
 ## Design Principles
 

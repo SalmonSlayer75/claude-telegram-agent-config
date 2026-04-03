@@ -67,9 +67,9 @@ Key principles:
 - **"IMMEDIATELY after"** — write after each exchange, not at session end
 - **Explicit pruning rules** — prevent unbounded growth
 
-### Layer 3: Hooks (Automated Nudges)
+### Layer 3: Hooks (Mandatory State-Save Gates)
 
-Instructions alone aren't enough. Use Claude Code hooks to inject system-level reminders that fire every time the bot sends a Telegram message.
+Instructions alone aren't enough. Gentle reminders get ignored under pressure. The production-hardened approach: **gate every Telegram reply behind a mandatory state save.**
 
 Add to your project's `.claude/settings.local.json`:
 
@@ -85,6 +85,15 @@ Add to your project's `.claude/settings.local.json`:
             "command": "if [ ! -f /tmp/mybot-state-loaded ]; then echo '[STARTUP] Read ~/myproject/bot-state.md FIRST to restore your working memory before replying.'; touch /tmp/mybot-state-loaded; fi"
           }
         ]
+      },
+      {
+        "matcher": "mcp__plugin_telegram_telegram__reply",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '[MANDATORY STATE SAVE] BEFORE sending this reply: Do you have ANY unsaved analysis, findings, decisions, or context that are NOT yet in ~/myproject/bot-state.md? If YES: STOP. Write them to your state file FIRST, THEN send this reply. Your conversation can end at any moment — if it is not in your state file, it is LOST. This is not optional.'"
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -93,7 +102,7 @@ Add to your project's `.claude/settings.local.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "echo '[STATE REMINDER] You just sent a Telegram reply. If this interaction involved any decisions, action items, commitments, or important context — update ~/myproject/bot-state.md NOW before doing anything else.'"
+            "command": "echo '[MANDATORY] You just sent a Telegram reply. Update ~/myproject/bot-state.md NOW with any decisions, action items, or context from this exchange. Do NOT skip this — your conversation can reset at any moment and anything not in the state file will be permanently lost.'"
           }
         ]
       }
@@ -103,21 +112,27 @@ Add to your project's `.claude/settings.local.json`:
 ```
 
 **How it works:**
-- **PreToolUse** fires before the first Telegram reply of a new session. A `/tmp/` flag file tracks whether the bot has read its state file this session. Flag resets on reboot.
-- **PostToolUse** fires after **every** Telegram reply — a constant nudge to update state.
+- **PreToolUse (startup)** fires before the first Telegram reply of a new session. A `/tmp/` flag file tracks whether the bot has read its state file. Flag resets on reboot.
+- **PreToolUse (mandatory save)** fires before **every** Telegram reply — forces the bot to save state BEFORE it can respond. This is the critical reliability improvement over gentle post-reply reminders.
+- **PostToolUse** fires after **every** Telegram reply — a second enforcement to capture anything from that exchange.
 
-See [examples/hooks/settings.local.json](../examples/hooks/settings.local.json) for a complete example.
+> **Why mandatory gates, not reminders?** We ran gentle "reminder" hooks for weeks. Bots would consistently ignore them when under pressure (long conversations, complex tasks). The mandatory PreToolUse gate changed the dynamic — the bot now saves state as a precondition for replying, not as an afterthought.
+
+See [examples/hooks/settings.local.json](../examples/hooks/settings.local.json) for the complete 4-hook lifecycle config.
 
 ## How the Layers Work Together
 
 1. **Bot starts** (fresh session, no context)
-2. **PreToolUse hook fires** → "Read your state file first!"
+2. **PreToolUse startup hook fires** → "Read your state file first!"
 3. Bot reads state file → knows what was happening before the restart
-4. Bot replies to the user on Telegram
-5. **PostToolUse hook fires** → "Update your state file NOW!"
-6. Bot writes any new decisions/items/context to state file
-7. Repeat 4-6 for every interaction
-8. Session eventually bakes → state file is already up to date
-9. Go to step 1
+4. User sends a message, bot prepares to reply
+5. **PreToolUse mandatory-save hook fires** → "Save unsaved state BEFORE replying!"
+6. Bot writes any pending state to state file
+7. Bot replies to the user on Telegram
+8. **PostToolUse hook fires** → "Update state file with this exchange NOW!"
+9. Bot captures decisions/items from the reply
+10. Repeat 4-9 for every interaction
+11. Session eventually bakes → state file is already up to date
+12. Go to step 1
 
-The key insight (borrowed from [OpenClaw](https://openclaw.ai/)): **don't rely on the bot to remember — remind it mechanically.**
+The key insight: **don't rely on the bot to remember — gate its actions behind mandatory persistence.**

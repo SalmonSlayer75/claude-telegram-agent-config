@@ -304,7 +304,7 @@ WHERE table_name = '[table]' AND column_name = '[new_column]';
 #### Applied To (Agent 4 handles all three — do not ask the product lead)
 - [ ] Local (supabase CLI)
 - [ ] Staging (`your-staging-project-ref`) — verified before proceeding to prod
-- [ ] Production (`zbrivyuhztprwpsqwwot`) — applied only after staging verified
+- [ ] Production (`your-production-project-ref`) — applied only after staging verified
 - [ ] TypeScript types regenerated from production schema
 
 ## Code Changes

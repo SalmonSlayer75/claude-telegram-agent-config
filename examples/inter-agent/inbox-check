@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# inbox-check — checks a bot's inbox for new messages
+# Usage: inbox-check <bot-name>
+# Returns: new message content if any, empty string if none
+# Exit code: 0 if new messages, 1 if empty
+#
+# CONFIGURE: Edit the INBOX_PATH array below to match your bot layout.
+
+set -euo pipefail
+
+BOT="$1"
+
+# Map bot names to inbox file paths — customize for your fleet
+declare -A INBOX_PATH
+INBOX_PATH[cos]="$HOME/ChiefOfStaff/inbox.md"
+INBOX_PATH[cto]="$HOME/CTO/inbox.md"
+INBOX_PATH[vpe-project-a]="$HOME/ProjectA/inbox.md"
+INBOX_PATH[vpe-project-b]="$HOME/ProjectB/inbox.md"
+INBOX_PATH[devops]="$HOME/DevOps/inbox.md"
+# Add more bots as needed:
+# INBOX_PATH[marketing]="$HOME/Marketing/inbox.md"
+
+INBOX="${INBOX_PATH[$BOT]:-}"
+if [ -z "$INBOX" ]; then
+    echo "Unknown bot: $BOT" >&2
+    exit 2
+fi
+
+if [ ! -f "$INBOX" ]; then
+    exit 1
+fi
+
+# Check for any messages with Status: new
+if grep -q "Status:** new" "$INBOX" 2>/dev/null; then
+    echo "[INBOX] You have new messages in $INBOX — read it now and handle any requests. After handling, change the message Status from 'new' to 'done'."
+    exit 0
+fi
+
+exit 1
