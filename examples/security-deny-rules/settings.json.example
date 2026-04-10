@@ -1,0 +1,47 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Edit",
+      "Write",
+      "Glob",
+      "Grep",
+      "WebSearch",
+      "WebFetch",
+      "Bash(git *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(npm *)",
+      "Bash(node *)",
+      "Bash(gh *)"
+    ],
+    "deny": [
+      "Bash(git push --force*)",
+      "Bash(git reset --hard*)",
+      "Bash(rm -rf /*)",
+      "Bash(rm -rf ~*)",
+      "Bash(> /dev/*)",
+      "Read(~/.ssh/**)",
+      "Write(~/.ssh/**)",
+      "Edit(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Write(~/.aws/**)",
+      "Edit(~/.aws/**)",
+      "Read(~/.claude/bot-credentials.env)",
+      "Write(~/.claude/bot-credentials.env)",
+      "Edit(~/.claude/bot-credentials.env)",
+      "Read(**/.env)",
+      "Write(**/.env)",
+      "Edit(**/.env)",
+      "Bash(curl * | bash*)",
+      "Bash(wget * | bash*)",
+      "Bash(curl * | sh*)",
+      "Bash(wget * | sh*)",
+      "Bash(ssh *)",
+      "Bash(scp *)",
+      "Bash(nc *)",
+      "Bash(ncat *)",
+      "Bash(netcat *)"
+    ]
+  }
+}

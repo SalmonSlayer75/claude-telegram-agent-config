@@ -1,6 +1,6 @@
 # Mindspan Labs Agents
 
-Battle-tested configuration for running a fleet of Claude Code bots as 24/7 Telegram agents with persistent memory, automatic recovery, scheduled tasks, inter-agent coordination, and 45+ reusable agent skills.
+Battle-tested configuration for running a fleet of Claude Code bots as 24/7 Telegram agents with persistent memory, automatic recovery, scheduled tasks, inter-agent coordination, behavioral learning, and 45+ reusable agent skills.
 
 ## What This Is
 
@@ -26,6 +26,12 @@ We run six Claude Code bots on a single machine via Telegram — a **Chief of St
 | 10 | **Credentials scattered across scripts** | Centralized env file sourced by all scripts | [Credentials](examples/credentials/) |
 | 11 | **Bots can't coordinate with each other** — tasks that span roles fall through the cracks | File-based inbox system with priority routing and hook-driven checks | [Inter-Agent Communication](docs/inter-agent-communication.md) |
 | 12 | **Hook changes are error-prone across many bots** — manual edits to 6 settings files is fragile | Fleet hook automation script that generates validated configs for all bots | [Fleet Hooks](examples/fleet-hooks/) |
+| 13 | **Bot ignores "save your state" reminders** — under pressure, soft reminders get skipped and context is lost | Hard gate that blocks substantive tool calls until state file is updated | [Bot Gate](examples/bot-gate/) |
+| 14 | **Bot doesn't learn from experience** — same mistakes repeated across sessions | Automated observation → pattern detection → instinct injection pipeline | [Instinct Learning](examples/instinct-learning/) |
+| 15 | **Hook count grows unmanageable** — 10+ hooks slow development, interfere with debugging | Runtime profiles (minimal/standard/strict) that gate which hooks run | [Hook Profiles](examples/hook-profiles/) |
+| 16 | **Bot weakens linter/CI configs** to "fix" failures instead of fixing the code | PreToolUse hook that blocks edits to protected config files | [Config Protection](examples/config-protection/) |
+| 17 | **One-shot tasks need different models** for different phases (implement vs review) | Automated PR pipeline with model routing per phase | [Continuous PR Loop](examples/continuous-pr-loop/) |
+| 18 | **No guardrails on dangerous commands** — `dontAsk` mode gives broad access with no safety net | Deny rules that block destructive git, credential access, and remote code execution | [Security Deny Rules](examples/security-deny-rules/) |
 
 ---
 
@@ -150,6 +156,27 @@ examples/
   management/                      # Bot lifecycle management
     claude-bot                     # start/stop/restart/status/logs for all bots
 
+  bot-gate/                        # Hard state-save enforcement gate
+    bot-gate.py                    # Unified gate with arm/check/stop-warn modes
+    gate-lists.sh                  # Tool classification (exempt vs substantive)
+
+  hook-profiles/                   # Runtime hook gating by profile level
+    hook-profile-gate.sh           # minimal/standard/strict profile wrapper
+
+  config-protection/               # Block edits to linter/formatter/CI configs
+    config-protection.sh           # PreToolUse hook for protected files
+
+  instinct-learning/               # Automated behavioral learning system
+    instinct-observe.py            # PostToolUse hook — captures observations
+    instinct-observer.py           # Pattern detector — creates instincts
+    instinct-cli.py                # CLI for managing instincts
+
+  continuous-pr-loop/              # Automated implement→review→merge pipeline
+    continuous-pr-loop.sh          # Multi-phase PR automation with model routing
+
+  security-deny-rules/             # Permission deny rules for safety
+    settings.json.example          # Recommended deny rules template
+
   agent-skills/                    # 45 reusable Claude Code slash commands
     README.md                      # Full catalog with descriptions
     vpe-workflow/                  # Plan -> Review -> Ship workflow (4 skills)
@@ -236,6 +263,18 @@ Each bot has an `inbox.md` file. Bots write messages to each other's inboxes wit
 
 ### Fleet Hook Automation = Consistent Configuration
 A Node.js script generates `.claude/settings.local.json` for all bots from a single config. When you need to change a hook pattern fleet-wide, edit one file and regenerate.
+
+### Bot Gate = Hard State-Save Enforcement
+The original "save your state" reminders were too gentle — bots ignore them under pressure. The bot gate is a PreToolUse hook that **blocks** substantive tool calls unless the bot has recently updated its state file. Two invariants: acknowledge new messages before working, and checkpoint every 10 tool calls.
+
+### Instinct Learning = Behavioral Improvement Over Time
+A three-stage pipeline: observe tool usage → detect recurring patterns → inject learned instincts into future sessions. Instincts have confidence scores that increase with evidence and decay over time, with a hard cap at 0.85 (never fully trust automated learning).
+
+### Hook Profiles = Controlled Overhead
+As hook count grows (15+ per bot), you need runtime control. Three profiles — minimal (debugging), standard (production), strict (critical operations) — gate which hooks execute. Individual hooks can also be disabled by ID.
+
+### Security Deny Rules = Last Line of Defense
+Deny rules in `settings.json` that block dangerous commands regardless of what the conversation says: no `git push --force`, no reading SSH keys, no `curl|bash`, no credential file access. These override all allow rules.
 
 ---
 

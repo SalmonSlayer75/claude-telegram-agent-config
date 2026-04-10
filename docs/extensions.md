@@ -508,3 +508,123 @@ Once the bot has been running for a few weeks, searchable history becomes valuab
 ### Priority 5: `--add-dir`, role isolation, and log rotation
 
 These matter once you have multiple bots or a bot that needs access to files outside its working directory. Not critical for a single-bot setup, but essential as complexity grows. Log rotation prevents disk space issues over months of operation.
+
+---
+
+## Problem #13: Bots Ignore "Save Your State" Reminders Under Pressure
+
+### What happens
+
+PostToolUse reminders ("don't forget to save state") get ignored when the bot is deep in a complex task. It keeps working, hits context limits, and loses everything since the last save. The reminder pattern was too gentle — it relied on the bot choosing to comply.
+
+### What we do now: Hard Gate on State Saves (Bot Gate)
+
+A PreToolUse hook that **blocks** substantive tool calls (Bash, Edit, WebSearch, etc.) unless the bot has updated its state file recently. Two invariants:
+
+1. **ACK invariant** — after a new Telegram message, the bot must update `## Active Conversation` before doing anything else. This ensures it acknowledges what was asked.
+2. **Counter invariant** — after 10 substantive tool calls without updating `## Active Conversation`, the gate blocks until the bot saves.
+
+Read-only tools (Read, Grep, Glob) are exempt. The bot can always edit its own state file (that's the escape hatch). The gate uses file locking to prevent races between the arm and check modes.
+
+This was the single biggest reliability improvement after the original 4-hook lifecycle. Bots that previously lost hours of work now checkpoint every 5-10 tool calls automatically.
+
+See [examples/bot-gate/](../examples/bot-gate/) for the full implementation.
+
+---
+
+## Problem #14: Bots Don't Learn From Experience
+
+### What happens
+
+AI agents make the same mistakes across sessions. They don't remember that a particular approach failed last time, or that a specific tool sequence is the most efficient workflow. You end up encoding every lesson manually in CLAUDE.md, which bloats the prompt.
+
+### What we do now: Instinct Learning System
+
+A three-stage pipeline:
+
+1. **Observe** — A PostToolUse hook captures every tool call to a JSONL log (with secret scrubbing and size limits)
+2. **Analyze** — A pattern detector runs periodically, identifying recurring flows, error-resolution patterns, and tool preferences
+3. **Inject** — A session-start hook loads high-confidence instincts into the bot's context
+
+Instincts use a confidence scoring system: new instincts start at 0.3, bump up with additional evidence, cap at 0.85 (never fully trust automated learning), and decay over time. Only instincts above 0.5 confidence are injected into sessions.
+
+This is experimental — the pattern detection is simple and can produce false positives. The confidence cap and decay mechanism prevent bad instincts from accumulating.
+
+See [examples/instinct-learning/](../examples/instinct-learning/) for the full implementation.
+
+---
+
+## Problem #15: Hook Count Grows Unmanageable
+
+### What happens
+
+As you add more hooks (state gates, inbox checks, memory indexing, compaction advisors), every tool call runs 10+ hooks. Development sessions are slow, debugging is painful, and some hooks interfere with others. You need a way to control which hooks run in which context.
+
+### What we do now: Hook Runtime Profiles
+
+A thin wrapper script that gates hook execution based on a profile level:
+
+- **minimal** — bare minimum for safety (just the state gate)
+- **standard** — normal production (state gate + inbox + memory)
+- **strict** — everything including expensive advisors
+
+Each hook declares its minimum profile level. Set `HOOK_PROFILE=minimal` for debugging, `standard` for normal operation, `strict` for critical work.
+
+Individual hooks can also be disabled by ID via `DISABLED_HOOKS=pre:gate:check,post:tg:heartbeat`.
+
+See [examples/hook-profiles/](../examples/hook-profiles/) for the implementation.
+
+---
+
+## Problem #16: Bots Weaken Linter/CI Configs to "Fix" Failures
+
+### What happens
+
+When an AI agent encounters a failing lint check or CI error, the path of least resistance is to edit the config — disable the ESLint rule, relax the TypeScript strictness, add an ignore pattern. This produces green CI with degraded code quality. We caught this multiple times: agents silently weakened configs to make errors disappear.
+
+### What we do now: Config Protection Hook
+
+A PreToolUse hook that blocks Edit/Write operations targeting known config files (ESLint, Prettier, tsconfig, CI workflows, etc.). The bot gets a clear message: "fix the source code, not the config."
+
+See [examples/config-protection/](../examples/config-protection/) for the implementation.
+
+---
+
+## Problem #17: One-Shot Tasks Need Different Models for Different Phases
+
+### What happens
+
+Running `claude -p` for automated tasks (CI fixes, code review, implementation) at the same model tier is wasteful. Implementation is high-volume and well-scoped — a fast model handles it fine. Review requires deeper reasoning — you want a more capable model. Using opus for everything is slow and expensive; using sonnet for everything misses subtle bugs.
+
+### What we do now: Model Routing in Automated Pipelines
+
+Our continuous PR loop script uses `--model` flags to route different phases to different models:
+
+- **Implementation, cleanup, CI fixes** → `sonnet` (fast, good enough for well-scoped tasks)
+- **Code review** → `opus` (deeper reasoning for correctness analysis)
+
+The script also supports multi-iteration mode with shared notes, a mandatory "de-sloppify" pass (separate context window that removes AI-typical cruft), and automatic CI failure detection with retry.
+
+See [examples/continuous-pr-loop/](../examples/continuous-pr-loop/) for the implementation.
+
+---
+
+## Problem #18: No Guardrails on Dangerous Commands
+
+### What happens
+
+Channel bots running in `dontAsk` permission mode have broad tool access. Without explicit deny rules, nothing prevents the bot from reading SSH keys, piping curl output to bash, force-pushing to git, or accessing credential files — whether accidentally or via prompt injection in processed content.
+
+### What we do now: Security Deny Rules
+
+Claude Code's `settings.json` supports `deny` rules that override all `allow` rules. We block:
+
+- **Destructive git**: `git push --force`, `git reset --hard`
+- **Catastrophic deletion**: `rm -rf /`, `rm -rf ~`
+- **Remote code execution**: `curl|bash`, `wget|sh`
+- **Network tools**: `ssh`, `scp`, `nc`, `netcat`
+- **Credential files**: `~/.ssh/**`, `~/.aws/**`, `.env` files, bot credential files
+
+These rules apply regardless of what the prompt says or what MCP tool output contains. They're the last line of defense.
+
+See [examples/security-deny-rules/](../examples/security-deny-rules/) for the full recommended ruleset.
