@@ -43,6 +43,15 @@
     ],
     "PostToolUse": [
       {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "touch /tmp/mybot-heartbeat"
+          }
+        ]
+      },
+      {
         "matcher": "mcp__plugin_telegram_telegram__reply",
         "hooks": [
           {

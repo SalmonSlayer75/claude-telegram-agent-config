@@ -20,6 +20,11 @@ BOT_TOKEN_PREFIX="1234567890"       # <-- First digits of your bot token
 pkill -f "telegram.*${BOT_TOKEN_PREFIX}" 2>/dev/null || true
 sleep 1
 
+# Touch heartbeat so watchdog knows we're alive from the start.
+# Without this, a freshly started bot has no heartbeat file and the
+# watchdog's stale-connection check might fire before the first tool call.
+touch /tmp/work-heartbeat           # <-- Match BOT_HEARTBEAT name in watchdog
+
 # --add-dir grants access to additional directories without changing working dir
 # Add as many as needed for your use case
 exec claude --channels plugin:telegram@claude-plugins-official \
