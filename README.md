@@ -32,6 +32,7 @@ We run six Claude Code bots on a single machine via Telegram — a **Chief of St
 | 16 | **Bot weakens linter/CI configs** to "fix" failures instead of fixing the code | PreToolUse hook that blocks edits to protected config files | [Config Protection](examples/config-protection/) |
 | 17 | **One-shot tasks need different models** for different phases (implement vs review) | Automated PR pipeline with model routing per phase | [Continuous PR Loop](examples/continuous-pr-loop/) |
 | 18 | **No guardrails on dangerous commands** — `dontAsk` mode gives broad access with no safety net | Deny rules that block destructive git, credential access, and remote code execution | [Security Deny Rules](examples/security-deny-rules/) |
+| 19 | **No visibility into fleet health** — problems discovered only when Jeremy notices a bot is broken | Daily automated review: gather all logs, feed to Claude, get prioritized report | [Fleet Review](examples/fleet-review/) |
 
 ---
 
@@ -174,6 +175,9 @@ examples/
 
   continuous-pr-loop/              # Automated implement→review→merge pipeline
     continuous-pr-loop.sh          # Multi-phase PR automation with model routing
+
+  fleet-review/                     # Automated daily fleet health report
+    fleet-review.sh                # Gather logs + Claude analysis → Telegram
 
   security-deny-rules/             # Permission deny rules for safety
     settings.json.example          # Recommended deny rules template
