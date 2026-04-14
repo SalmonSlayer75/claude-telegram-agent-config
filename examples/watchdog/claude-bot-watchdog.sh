@@ -50,7 +50,13 @@ BOT_STATE_FILE[personal]="$HOME/PersonalProject/personal-state.md"
 ALL_BOTS="work personal"
 # --- END CONFIGURATION ---
 
-HEARTBEAT_STALE_SECONDS=10800  # 3 hours
+HEARTBEAT_STALE_SECONDS=10800  # 3 hours (default)
+
+# Per-bot overrides for bots that legitimately idle longer between messages.
+# Low-traffic bots (on-demand only, cron-driven) don't need the default 3h threshold.
+# Without this, the watchdog restarts idle-but-healthy bots every 3 hours for no reason.
+declare -A BOT_STALE_OVERRIDE
+# Example: BOT_STALE_OVERRIDE[personal]=21600  # 6 hours
 
 # Extract Active Conversation topic from a bot's state file (first 200 chars)
 get_active_topic() {
@@ -93,7 +99,8 @@ check_heartbeat() {
     hb_time=$(stat -c %Y "$hb_file" 2>/dev/null || echo "$now")
     age=$(( now - hb_time ))
 
-    if [ "$age" -ge "$HEARTBEAT_STALE_SECONDS" ]; then
+    local threshold="${BOT_STALE_OVERRIDE[$name]:-$HEARTBEAT_STALE_SECONDS}"
+    if [ "$age" -ge "$threshold" ]; then
         return 0  # stale
     fi
     return 1  # not stale

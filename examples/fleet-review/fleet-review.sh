@@ -56,6 +56,9 @@ BOTGATE_PATTERN="$HOME/.claude/channels/bot-gate-*.log"
 # Heartbeat file pattern (/tmp/{name}-heartbeat)
 HEARTBEAT_DIR="/tmp"
 
+# Where to save the report for the operator bot to read on next session
+REPORT_FILE="$HOME/DevOps/fleet-review-latest.md"
+
 # --- End configuration ---
 
 REPORT_DIR="/tmp/fleet-review-$$"
@@ -94,6 +97,7 @@ log "Fleet review starting"
 
 YESTERDAY=$(date -d 'yesterday' '+%Y-%m-%d' 2>/dev/null || date -v-1d '+%Y-%m-%d')
 TODAY=$(date '+%Y-%m-%d')
+YESTERDAY_EPOCH=$(date -d 'yesterday' '+%s' 2>/dev/null || date -v-1d '+%s')
 
 # --- Gather data ---
 
@@ -104,11 +108,20 @@ if [ -f "$WATCHDOG_LOG" ]; then
 fi
 
 # 2. Bot-gate sentinel logs — last 24 hours
+# Bot-gate logs use unix timestamps, so filter by epoch range and convert
 for f in $BOTGATE_PATTERN; do
     [ -f "$f" ] || continue
-    echo "=== $(basename "$f") ===" >> "$REPORT_DIR/bot-gate.txt"
-    grep "$YESTERDAY\|$TODAY" "$f" 2>/dev/null \
-        >> "$REPORT_DIR/bot-gate.txt" || true
+    recent_lines=""
+    while IFS= read -r line; do
+        ts="${line%% *}"
+        if [[ "$ts" =~ ^[0-9]+$ ]] && [ "$ts" -ge "$YESTERDAY_EPOCH" ] 2>/dev/null; then
+            recent_lines+="$(date -d "@$ts" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date -r "$ts" '+%Y-%m-%d %H:%M:%S') ${line#* }"$'\n'
+        fi
+    done < "$f"
+    if [ -n "$recent_lines" ]; then
+        echo "=== $(basename "$f") ===" >> "$REPORT_DIR/bot-gate.txt"
+        echo "$recent_lines" >> "$REPORT_DIR/bot-gate.txt"
+    fi
 done
 
 # 3. Bot tmux session status
@@ -214,7 +227,13 @@ if [ $EXIT_CODE -ne 0 ] || [ -z "$RESULT" ]; then
     log "Stderr: $(cat "$ERRLOG")"
     send_telegram "Fleet review failed — check fleet-review.log"
 else
-    log "Fleet review OK — sent (${#RESULT} chars)"
+    # Save report to disk so operator bot can read it and follow up
+    cat > "$REPORT_FILE" << REPORTEOF
+# Fleet Review — $(date '+%Y-%m-%d %H:%M %Z')
+
+$RESULT
+REPORTEOF
+    log "Fleet review OK — sent (${#RESULT} chars), saved to $REPORT_FILE"
     send_telegram "$RESULT"
 fi
 
