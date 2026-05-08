@@ -1,0 +1,158 @@
+#!/usr/bin/env bash
+# interbot-send-v3 — SQLite-based inter-bot real-time message sender.
+#
+# Inserts a message row into the interbot SQLite database and touches the
+# recipient's wake file so the watcher delivers it immediately.
+#
+# Exit codes:
+#   0   message committed and wake touched
+#   1   generic error (bad flags, unreadable body)
+#   2   JSON body validation failed
+#   3   durable enqueue OK, wake touch failed
+#   4   SQLite busy after retries — no row inserted
+#   5   unknown --from or --to bot
+#   7   dedupe collision (row already persisted by earlier call)
+
+set -euo pipefail
+
+INTERBOT_DIR="${INTERBOT_DIR:-$HOME/.claude/interbot}"
+DB="$INTERBOT_DIR/interbot.db"
+WAKE_DIR="$INTERBOT_DIR/wake"
+SCHEMA="${INTERBOT_SCHEMA:-$HOME/bin/lib/interbot-schema.sql}"   # <-- CHANGE THIS
+
+# CUSTOMIZE: list your fleet bots here
+KNOWN_BOTS=(work research devops engineering)
+
+die1() { echo "interbot-send: $*" >&2; exit 1; }
+
+usage() {
+    cat >&2 <<'EOF'
+Usage: interbot-send-v3 --from <bot> --to <bot>
+                        [--subject <str>]
+                        --body-file <path>
+                        [--thread-id <str>]
+                        [--reply-to <msg-id>]
+                        [--dedupe-key <str>]
+EOF
+    exit 1
+}
+
+is_known_bot() {
+    local needle="$1"
+    for b in "${KNOWN_BOTS[@]}"; do
+        [[ "$b" == "$needle" ]] && return 0
+    done
+    return 1
+}
+
+FROM="" TO="" SUBJECT="" BODY_FILE="" THREAD_ID="" REPLY_TO="" DEDUPE_KEY=""
+
+while (( $# > 0 )); do
+    case "$1" in
+        --from)          FROM="${2:-}"; shift 2 ;;
+        --to)            TO="${2:-}"; shift 2 ;;
+        --subject)       SUBJECT="${2:-}"; shift 2 ;;
+        --body-file)     BODY_FILE="${2:-}"; shift 2 ;;
+        --thread-id)     THREAD_ID="${2:-}"; shift 2 ;;
+        --reply-to)      REPLY_TO="${2:-}"; shift 2 ;;
+        --dedupe-key)    DEDUPE_KEY="${2:-}"; shift 2 ;;
+        -h|--help)       usage ;;
+        *) die1 "unknown flag: $1" ;;
+    esac
+done
+
+[[ -z "$FROM" ]] && die1 "--from required"
+[[ -z "$TO" ]]   && die1 "--to required"
+[[ -z "$BODY_FILE" ]] && die1 "--body-file required"
+[[ ! -r "$BODY_FILE" ]] && die1 "body file not readable: $BODY_FILE"
+
+if ! is_known_bot "$FROM" || ! is_known_bot "$TO"; then
+    echo "interbot-send: unknown bot (known: ${KNOWN_BOTS[*]})" >&2
+    exit 5
+fi
+
+if [[ -n "$SUBJECT" && ${#SUBJECT} -gt 200 ]]; then
+    die1 "--subject exceeds 200 chars"
+fi
+
+if ! jq -e . "$BODY_FILE" >/dev/null 2>&1; then
+    echo "interbot-send: body file is not valid JSON" >&2
+    exit 2
+fi
+BODY_JSON="$(cat "$BODY_FILE")"
+
+mkdir -p "$INTERBOT_DIR" "$WAKE_DIR"
+if [[ ! -f "$DB" ]]; then
+    [[ -r "$SCHEMA" ]] || die1 "DB missing and schema not found at $SCHEMA"
+    sqlite3 "$DB" < "$SCHEMA" >/dev/null
+fi
+
+if [[ -n "$REPLY_TO" ]]; then
+    [[ "$REPLY_TO" =~ ^[0-9]+$ ]] || die1 "--reply-to must be a positive integer"
+    parent=$(sqlite3 -cmd ".timeout 5000" "$DB" \
+        "SELECT COUNT(*)||'|'||COALESCE(thread_id,'') FROM messages WHERE id=$REPLY_TO;")
+    cnt="${parent%%|*}"
+    parent_thread="${parent#*|}"
+    [[ "$cnt" == "1" ]] || die1 "--reply-to message id $REPLY_TO does not exist"
+    [[ -z "$THREAD_ID" ]] && THREAD_ID="$parent_thread"
+fi
+
+if [[ -z "$THREAD_ID" ]]; then
+    if command -v uuidgen >/dev/null 2>&1; then
+        THREAD_ID="$(uuidgen)"
+    else
+        THREAD_ID="$(cat /proc/sys/kernel/random/uuid)"
+    fi
+fi
+
+sql_esc() { local s="${1//\'/\'\'}"; printf %s "$s"; }
+
+S_FROM="$(sql_esc "$FROM")"
+S_TO="$(sql_esc "$TO")"
+S_SUBJECT="$(sql_esc "$SUBJECT")"
+S_BODY="$(sql_esc "$BODY_JSON")"
+S_THREAD="$(sql_esc "$THREAD_ID")"
+S_DEDUPE="$(sql_esc "$DEDUPE_KEY")"
+REPLY_TO_SQL="NULL"
+[[ -n "$REPLY_TO" ]] && REPLY_TO_SQL="$REPLY_TO"
+SUBJECT_SQL="NULL"
+[[ -n "$SUBJECT" ]] && SUBJECT_SQL="'$S_SUBJECT'"
+DEDUPE_SQL="NULL"
+[[ -n "$DEDUPE_KEY" ]] && DEDUPE_SQL="'$S_DEDUPE'"
+
+TMPERR="$(mktemp)"
+trap 'rm -f "$TMPERR"' EXIT
+
+if ! sqlite3 -bail -cmd ".timeout 5000" "$DB" <<SQL 2>"$TMPERR"
+BEGIN IMMEDIATE;
+INSERT INTO messages
+    (created_at, sender, kind, subject, body_json, thread_id, reply_to_id, dedupe_key)
+VALUES
+    (datetime('now'), '$S_FROM', 'direct', $SUBJECT_SQL, '$S_BODY', '$S_THREAD', $REPLY_TO_SQL, $DEDUPE_SQL);
+INSERT INTO recipients
+    (message_id, recipient, created_at, delivery_state)
+VALUES
+    (last_insert_rowid(), '$S_TO', datetime('now'), 'pending');
+COMMIT;
+SQL
+then
+    err="$(cat "$TMPERR")"
+    if grep -qi "UNIQUE constraint failed" <<<"$err"; then
+        echo "interbot-send: duplicate-suppressed (dedupe_key=$DEDUPE_KEY)" >&2
+        exit 7
+    fi
+    if grep -qiE "database is locked|database is busy" <<<"$err"; then
+        echo "interbot-send: SQLite busy after retries" >&2
+        exit 4
+    fi
+    echo "interbot-send: SQL error: $err" >&2
+    exit 1
+fi
+
+WAKE_FILE="$WAKE_DIR/$TO"
+if ! touch "$WAKE_FILE" 2>/dev/null; then
+    echo "interbot-send: wake touch failed for $WAKE_FILE" >&2
+    exit 3
+fi
+
+exit 0

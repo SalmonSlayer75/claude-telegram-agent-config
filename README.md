@@ -1,6 +1,6 @@
 # Mindspan Labs Agents
 
-Battle-tested configuration for running a fleet of Claude Code bots as 24/7 Telegram agents with persistent memory, automatic recovery, scheduled tasks, inter-agent coordination, behavioral learning, and 45+ reusable agent skills.
+Battle-tested configuration for running a fleet of Claude Code bots as 24/7 Telegram agents with persistent memory, automatic recovery, interrupted-work resumption, local LLM inference, inter-agent coordination, behavioral learning, fleet metrics, and 45+ reusable agent skills.
 
 ## What This Is
 
@@ -32,7 +32,15 @@ We run six Claude Code bots on a single machine via Telegram — a **Chief of St
 | 16 | **Bot weakens linter/CI configs** to "fix" failures instead of fixing the code | PreToolUse hook that blocks edits to protected config files | [Config Protection](examples/config-protection/) |
 | 17 | **One-shot tasks need different models** for different phases (implement vs review) | Automated PR pipeline with model routing per phase | [Continuous PR Loop](examples/continuous-pr-loop/) |
 | 18 | **No guardrails on dangerous commands** — `dontAsk` mode gives broad access with no safety net | Deny rules that block destructive git, credential access, and remote code execution | [Security Deny Rules](examples/security-deny-rules/) |
-| 19 | **No visibility into fleet health** — problems discovered only when Jeremy notices a bot is broken | Daily automated review: gather all logs, feed to Claude, get prioritized report | [Fleet Review](examples/fleet-review/) |
+| 19 | **No visibility into fleet health** — problems discovered only when the owner notices a bot is broken | Daily automated review: gather all logs, feed to Claude, get prioritized report | [Fleet Review](examples/fleet-review/) |
+| 20 | **Session dies mid-task, work abandoned** — multi-step work (deploy, migrate, review) lost on crash | JSON sidecar tracks steps + safety classification; auto-resumes safe steps, asks approval for risky ones | [Auto-Resume](examples/auto-resume/) |
+| 21 | **Background workers conflict with live sessions** — resume worker and Telegram session write same state | Lock-aware PreToolUse gate blocks substantive writes while flock is held; stale-write guard prevents stale reads | [Lock Gate](examples/lock-gate/) |
+| 22 | **Stale lock files block operations** — crashed processes leave orphaned .lock files | Janitor uses `flock -n` to detect unheld locks; only deletes locks older than grace window | [Stale Lock Janitor](examples/stale-lock-janitor/) |
+| 23 | **Local LLM requests are uncoordinated** — multiple cron jobs hit the GPU simultaneously | Journal-based queue daemon with priority dispatch, on-demand model lifecycle, crash recovery | [GPU Queue](examples/gpu-queue/) |
+| 24 | **Cron jobs need structured LLM output cheaply** — cloud API calls are expensive for routine tasks | Grammar-constrained local inference with GBNF support, telemetry, and retry logic | [Local Inference](examples/local-inference/) |
+| 25 | **File-based inbox doesn't scale** — race conditions, no threading, no delivery tracking | SQLite-based real-time messaging with threading, dedupe, delivery state, and wake-file notifications | [Inter-Agent v3](examples/inter-agent/) |
+| 26 | **Watchdog itself goes down silently** — nobody watches the watcher | Dead-man's-switch: verifies watchdog tick + all bot tmux sessions, with alert suppression | [Fleet Heartbeat](examples/fleet-heartbeat/) |
+| 27 | **No fleet-level metrics** — can't track bake rates, session ages, queue depths over time | Prometheus textfile emitter: thread-safe counters/gauges, dual-mode (library + CLI) | [Fleet Metrics](examples/fleet-metrics/) |
 
 ---
 
@@ -129,8 +137,10 @@ examples/
     update-fleet-hooks.js          # Generate hook configs for all bots at once
 
   inter-agent/                     # Inter-agent coordination
-    inbox-check                    # Check bot inbox for new messages
+    inbox-check                    # v1: Check bot inbox for new messages (file-based)
     inbox-template.md              # Template for bot inbox files
+    interbot-send-v3               # v3: SQLite-based real-time message sender
+    schema.sql                     # SQLite schema for interbot messaging
 
   state-files/                     # Structured state file templates
     bot-state.md                   # General-purpose bot
@@ -181,6 +191,33 @@ examples/
 
   security-deny-rules/             # Permission deny rules for safety
     settings.json.example          # Recommended deny rules template
+
+  auto-resume/                     # Interrupted work recovery (problem 20)
+    bot-auto-resume.sh             # Detection engine: reads sidecar, checks safety, emits resume prompt
+    ac-resume-write.sh             # Fallback atomic sidecar writer
+
+  lock-gate/                       # Concurrent access protection (problem 21)
+    bot-lock-gate.py               # flock-based PreToolUse gate with stale-write guard
+
+  stale-lock-janitor/              # Orphaned lock cleanup (problem 22)
+    stale-lock-janitor.sh          # flock -n probe + grace window + dry-run mode
+
+  gpu-queue/                       # Local LLM dispatch daemon (problem 23)
+    gpu-queue-daemon.py            # Priority scheduler with on-demand model lifecycle
+    gpu-queue-client.sh            # CLI: enqueue, status, wait
+
+  local-inference/                 # Grammar-constrained local LLM (problem 24)
+    local-infer-structured.sh      # GBNF grammar + telemetry + retry
+
+  fleet-heartbeat/                 # Dead-man's-switch monitor (problem 26)
+    fleet-heartbeat-check.sh       # Watches-the-watcher with alert suppression
+
+  fleet-metrics/                   # Prometheus-compatible metrics (problem 27)
+    fleet-metrics.sh               # Thread-safe counter/gauge emitter (library + CLI)
+
+  lib/                             # Shared shell libraries
+    auto-resume-paths.sh           # Per-bot state directory lookup table
+    page-telegram.sh               # Validated Telegram sender with retry-as-plain fallback
 
   agent-skills/                    # 45 reusable Claude Code slash commands
     README.md                      # Full catalog with descriptions
@@ -280,6 +317,18 @@ As hook count grows (15+ per bot), you need runtime control. Three profiles — 
 
 ### Security Deny Rules = Last Line of Defense
 Deny rules in `settings.json` that block dangerous commands regardless of what the conversation says: no `git push --force`, no reading SSH keys, no `curl|bash`, no credential file access. These override all allow rules.
+
+### Auto-Resume = Interrupted Work Recovery
+Sessions die mid-task. A JSON sidecar tracks each step's completion status and safety classification (`safe`, `needs-approval`, `destructive`). On restart, the resume engine checks safety rails (staleness, attempt limits) and either auto-resumes safe steps, requests approval for risky ones, or escalates to the owner. Durable approval tokens survive session crashes.
+
+### Lock Gate = Concurrent Access Protection
+When a background worker (`claude -p`) holds a flock on shared state, the live Telegram session's substantive writes are blocked. Read-only tools always pass. A stale-write guard tracks paths denied during lock-hold — the bot must Read them before Writing after the lock releases.
+
+### GPU Queue = Coordinated Local Inference
+A single-instance daemon manages dispatch to local LLM backends (llama.cpp). Append-only JSONL journal for crash recovery. Priority scheduling with fairness override. On-demand model lifecycle: start on first request, unload after 15-minute idle.
+
+### Fleet Heartbeat = Watches the Watcher
+The watchdog restarts baked bots. But what if the watchdog itself dies? A separate dead-man's-switch monitors the watchdog's tick file and all bot tmux sessions, with alert suppression to avoid spam.
 
 ---
 
