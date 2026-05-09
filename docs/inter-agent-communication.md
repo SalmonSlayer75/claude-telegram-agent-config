@@ -138,3 +138,91 @@ your inbox template. Always set **Status: new** when sending.
 - **Prune regularly.** Delete `done` messages older than 3 days to keep inbox files small.
 - **Set Status: new when sending.** The recipient changes it to `done` after handling.
 - **Include Re: when responding.** Reference the original MSG-ID so context is traceable.
+
+---
+
+## v3: SQLite-Based Real-Time Messaging
+
+The file-based inbox works for 2-3 bots but has limitations as the fleet grows:
+
+- **Race conditions**: two bots appending to the same `inbox.md` simultaneously can corrupt the file
+- **No threading**: matching replies to original messages requires manual MSG-ID tracking
+- **No delivery confirmation**: the sender doesn't know if the recipient read the message
+- **Polling overhead**: every bot greps every inbox before every Telegram reply
+
+### The Upgrade
+
+v3 replaces markdown files with a shared SQLite database. SQLite handles concurrent writes atomically — no corruption risk.
+
+### Schema
+
+```sql
+CREATE TABLE messages (
+  id INTEGER PRIMARY KEY,
+  from_bot TEXT NOT NULL,
+  subject TEXT,
+  body TEXT NOT NULL,
+  thread_id TEXT,
+  reply_to INTEGER REFERENCES messages(id),
+  created_at TEXT DEFAULT (datetime('now')),
+  dedupe_key TEXT UNIQUE
+);
+
+CREATE TABLE recipients (
+  message_id INTEGER REFERENCES messages(id),
+  to_bot TEXT NOT NULL,
+  delivered INTEGER DEFAULT 0,
+  delivered_at TEXT,
+  PRIMARY KEY (message_id, to_bot)
+);
+
+CREATE UNIQUE INDEX idx_dedupe ON messages(dedupe_key) WHERE dedupe_key IS NOT NULL;
+```
+
+### Sending a Message
+
+Use the `interbot-send-v3` script:
+
+```bash
+# Simple message
+interbot-send-v3 --to cto --subject "Hook update ready" --body "Fleet hooks regenerated. Need your review."
+
+# Reply to a previous message (threading)
+interbot-send-v3 --to cto --reply-to 42 --body "Done. Configs deployed."
+
+# With dedupe key (safe to retry after crash)
+interbot-send-v3 --to vpe-project-a --dedupe-key "deploy-hooks-2026-05-08" --body "..."
+```
+
+### Receiving Messages
+
+v3 uses **wake-file notifications** instead of polling. When a message is sent, the sender touches a file at `~/.claude/interbot-wake/<bot-name>`. The recipient's channel plugin detects the file change and delivers the message in real-time — no hook-based polling needed.
+
+For bots still using the hook-based approach, a check script queries the SQLite database for undelivered messages addressed to that bot.
+
+### Key Improvements Over v1
+
+| Feature | v1 (file-based) | v3 (SQLite) |
+|---------|-----------------|-------------|
+| Concurrent writes | Risk of corruption | Atomic (SQLite WAL mode) |
+| Threading | Manual MSG-ID matching | `reply_to` + `thread_id` fields |
+| Delivery tracking | None | `recipients.delivered` flag |
+| Crash recovery | Lost messages possible | `dedupe_key` prevents duplicates |
+| Notification | Polling via hook | Wake-file push notification |
+| Scalability | Degrades with message volume | SQLite handles thousands of messages |
+
+### When to Use Which
+
+- **v1 (file-based)**: Simple setups with 2-3 bots and infrequent coordination. No external dependencies beyond the filesystem.
+- **v3 (SQLite)**: Fleets of 4+ bots, high message volume, or when delivery reliability matters. Requires SQLite3 (pre-installed on most Linux systems).
+
+### Migration
+
+v1 and v3 can coexist. The inbox.md files still work for bots that haven't been upgraded. Migrate one bot at a time by:
+
+1. Install the `interbot-send-v3` script and `schema.sql`
+2. Initialize the database: `sqlite3 ~/.claude/interbot.db < schema.sql`
+3. Update the bot's hooks to check SQLite instead of inbox.md
+4. Other bots can still send to this bot via either system
+
+See [examples/inter-agent/](../examples/inter-agent/) for the schema and sender script.

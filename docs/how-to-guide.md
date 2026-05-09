@@ -804,7 +804,9 @@ Append to the target bot's inbox.md:
 
 See [Inter-Agent Communication](inter-agent-communication.md) for the full message format and guidelines.
 
-> **Why file-based instead of a database or message queue?** Because it's the simplest thing that works. The bots can already read and write files — no new dependencies, no new failure modes. A markdown file in the working directory is something Claude natively understands. We've run this system for weeks across 6 bots without issues.
+> **Why file-based instead of a database or message queue?** Because it's the simplest thing that works. The bots can already read and write files — no new dependencies, no new failure modes. A markdown file in the working directory is something Claude natively understands.
+
+> **Scaling up?** If you grow beyond 3 bots or need delivery confirmation and threading, see the [v3 SQLite-based messaging](inter-agent-communication.md#v3-sqlite-based-real-time-messaging) upgrade in the inter-agent communication docs. It replaces inbox.md files with a shared SQLite database — atomic writes, no corruption risk, real-time push notifications.
 
 ---
 
@@ -846,6 +848,18 @@ At this point you have:
 - Check the state files periodically to see what the bots are capturing
 - Add integrations (Google Workspace, Notion) as you identify needs
 - Read Part 2 if you want to add engineering bots
+
+### Going Further (Advanced Fleet Capabilities)
+
+Once your fleet is stable and you want more reliability or capability, see [extensions.md](extensions.md) for detailed writeups of:
+
+- **Auto-Resume** (Problem #20) — bots pick up interrupted multi-step work automatically after a crash, with safety classification so risky steps always ask first
+- **Lock Gate** (Problem #21) — prevents background workers and live sessions from clobbering each other's state files
+- **GPU Queue** (Problem #23) — if you run local LLM backends (llama.cpp), a queue daemon coordinates all requests by priority and manages model lifecycle
+- **Local Inference** (Problem #24) — grammar-constrained local inference for cheap structured output (email triage, log classification) without burning cloud API quota
+- **Inter-Agent v3** (Problem #25) — SQLite-based messaging that replaces the file-based inbox with atomic writes, threading, and delivery tracking
+- **Fleet Heartbeat** (Problem #26) — a dead-man's-switch that watches the watchdog itself
+- **Fleet Metrics** (Problem #27) — Prometheus-compatible metrics for tracking bake rates, session ages, and queue depths over time
 
 ---
 
