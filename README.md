@@ -47,7 +47,8 @@ We run seven Claude Code bots on a single machine via Telegram — a **Chief of 
 ## Quick Start
 
 ### New to all of this? Start here:
-1. Read the **[How-To Guide](docs/how-to-guide.md)** — a step-by-step walkthrough with explanations of *why* each piece exists, aimed at PMs and operators (not just engineers)
+1. Read the **[Fleet Technical Brief](docs/fleet-technical-brief.md)** — a comprehensive 14-section guide covering what agents are, why you'd want a fleet, how to design personas, manage state, coordinate agents, handle security, and build your first agent in an afternoon. Written for business leaders, not just engineers.
+2. Then read the **[How-To Guide](docs/how-to-guide.md)** — a step-by-step walkthrough with explanations of *why* each piece exists, aimed at PMs and operators
 
 ### Want the technical reference instead?
 1. Follow the [Base Setup Guide](docs/base-setup-guide.md) to get a working Telegram bot
@@ -110,7 +111,8 @@ We run seven Claude Code bots on a single machine via Telegram — a **Chief of 
 
 ```
 docs/
-  how-to-guide.md                  # Complete walkthrough for PMs/operators (start here)
+  fleet-technical-brief.md         # Comprehensive fleet guide for business leaders (start here)
+  how-to-guide.md                  # Complete walkthrough for PMs/operators
   base-setup-guide.md              # Technical reference: from zero to working Telegram bot
   extensions.md                    # Full writeup of all production additions
   personalization.md               # User profile learning loop pattern
